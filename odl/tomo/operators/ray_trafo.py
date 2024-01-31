@@ -333,52 +333,54 @@ class RayTransform(Operator):
         adjoint : `RayBackProjection`
         """
         if self._adjoint is None:
-            # bring `self` into scope to prevent shadowing in inline class
-            ray_trafo = self
-
-            class RayBackProjection(Operator):
-                """Adjoint of the discrete Ray transform between L^p spaces."""
-
-                def _call(self, x, out=None, **kwargs):
-                    """Backprojection.
-
-                    Parameters
-                    ----------
-                    x : DiscretizedSpaceElement
-                        A sinogram. Must be an element of
-                        `RayTransform.range` (domain of `RayBackProjection`).
-                    out : `RayBackProjection.domain` element, optional
-                        A volume to which the result of this evaluation is
-                        written.
-                    **kwargs
-                        Extra keyword arguments, passed on to the
-                        implementation backend.
-
-                    Returns
-                    -------
-                    DiscretizedSpaceElement
-                        Result of the transform in the domain
-                        of `RayProjection`.
-                    """
-                    return ray_trafo.get_impl(
-                        ray_trafo.use_cache
-                    ).call_backward(x, out, **kwargs)
-
-                @property
-                def geometry(self):
-                    return ray_trafo.geometry
-
-                @property
-                def adjoint(self):
-                    return ray_trafo
-
             kwargs = self._extra_kwargs.copy()
+            kwargs['range'] = self.domain
             kwargs['domain'] = self.range
-            self._adjoint = RayBackProjection(
-                range=self.domain, linear=True, **kwargs
-            )
+            kwargs['linear'] = True
+            self._adjoint = RayBackProjection(self, **kwargs)
 
         return self._adjoint
+
+
+class RayBackProjection(Operator):
+    """Adjoint of the discrete Ray transform between L^p spaces."""
+
+    def __init__(self, forward_op, **kwargs):
+        self.forward_op = forward_op
+        super(RayBackProjection, self).__init__(**kwargs)
+
+    def _call(self, x, out=None, **kwargs):
+        """Backprojection.
+
+        Parameters
+        ----------
+        x : DiscretizedSpaceElement
+            A sinogram. Must be an element of
+            `RayTransform.range` (domain of `RayBackProjection`).
+        out : `RayBackProjection.domain` element, optional
+            A volume to which the result of this evaluation is
+            written.
+        **kwargs
+            Extra keyword arguments, passed on to the
+            implementation backend.
+
+        Returns
+        -------
+        DiscretizedSpaceElement
+            Result of the transform in the domain
+            of `RayProjection`.
+        """
+        return self.forward_op.get_impl(
+            self.forward_op.use_cache
+        ).call_backward(x, out, **kwargs)
+
+    @property
+    def geometry(self):
+        return self.forward_op.geometry
+
+    @property
+    def adjoint(self):
+        return self.forward_op
 
 
 if __name__ == '__main__':
